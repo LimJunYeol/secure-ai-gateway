@@ -9,10 +9,6 @@
 ## 핵심 메커니즘: 멀티테넌시 격리
 <img width="217" height="150" alt="multitenancy_isolation_flow" src="https://github.com/user-attachments/assets/7aa57dd3-bbf7-464b-ab1d-7db75e25c32a" />
 
-ThreadLocal + JPA EntityListener + Hibernate Filter 결합으로 
-모든 SELECT에 `WHERE tenant_id = ?` 가 자동 추가됩니다.
-설계 근거: [ADR-001](docs/adr/001-multitenancy-strategy.md)
-
 ## 진행 상태
 - Week 1: 설계 (요구사항 / 데이터 모델 / ADR-001)
 - Week 2 Mon-Wed: 백엔드 골격 + 멀티테넌시 격리
