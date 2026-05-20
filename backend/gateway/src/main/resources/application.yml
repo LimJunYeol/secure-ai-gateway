@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: secure-ai-gateway
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aigateway
+    username: aigateway
+    password: aigateway_dev
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update    # 개발 중에는 update, 운영은 validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: true
+    open-in-view: false   # 안티패턴 방지
+
+server:
+  port: 8080
+
+# JWT 설정
+app:
+  jwt:
+    secret: change-this-to-a-very-long-secret-key-for-development-only-${random.uuid}
+    access-token-ttl-minutes: 60
+    refresh-token-ttl-days: 30
+
+# Springdoc (Swagger UI)
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  api-docs:
+    path: /v3/api-docs
+
+# 로깅
+logging:
+  level:
+    root: INFO
+    com.aiagent.gateway: DEBUG
+    org.hibernate.SQL: DEBUG
