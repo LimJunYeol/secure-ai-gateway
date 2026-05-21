@@ -6,29 +6,26 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
-/**
- * 개발 단계 임시 보안 설정.
- * 목요일에 JWT 인증 필터 추가하면서 본격 설정으로 교체 예정.
- * 지금은 멀티테넌시 격리 동작 검증 목적으로 모든 엔드포인트 허용.
- */
 @Configuration
 public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                // REST API는 CSRF 보호 불필요 (토큰 기반 인증 사용 예정)
                 .csrf(csrf -> csrf.disable())
-
-                // JWT 기반이라 세션 안 씀 (Stateless)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // 기본 폼 로그인, HTTP Basic 비활성화
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
-
-                // 개발 단계: 모든 요청 허용 (목요일에 변경)
                 .authorizeHttpRequests(auth -> auth
+                        // 공개 엔드포인트
+                        .requestMatchers(
+                                "/api/v1/auth/**",
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/dev/**"  // 임시 (금요일에 제거 예정)
+                        ).permitAll()
+                        // 나머지는 일단 허용 (내일 JWT 필터 들어가면서 .authenticated()로 변경)
                         .anyRequest().permitAll()
                 );
 

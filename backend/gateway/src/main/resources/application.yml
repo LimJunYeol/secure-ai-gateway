@@ -24,7 +24,7 @@ server:
 # JWT 설정
 app:
   jwt:
-    secret: change-this-to-a-very-long-secret-key-for-development-only-${random.uuid}
+    secret: "this-is-a-very-long-development-secret-for-jwt-signing-do-not-use-in-production-please-use-environment-variable-instead"
     access-token-ttl-minutes: 60
     refresh-token-ttl-days: 30
 
