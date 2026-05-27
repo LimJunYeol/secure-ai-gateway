@@ -111,3 +111,18 @@ def search(req: SearchRequest):
     except Exception:
         logger.exception("검색 실패")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
+
+
+class DeleteRequest(BaseModel):
+    tenant_id: str
+    document_id: str
+
+@app.post("/delete")
+def delete_document(req: DeleteRequest):
+    """특정 문서의 모든 청크를 Qdrant에서 삭제."""
+    try:
+        vector_store.delete_document(req.tenant_id, req.document_id)
+        return {"deleted": True, "document_id": req.document_id}
+    except Exception:
+        logger.exception("삭제 실패")
+        raise HTTPException(status_code=500, detail="삭제 중 오류가 발생했습니다")

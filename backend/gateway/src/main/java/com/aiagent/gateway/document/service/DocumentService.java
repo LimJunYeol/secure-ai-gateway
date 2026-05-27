@@ -9,6 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.aiagent.gateway.document.ai.AiServiceClient;
+import com.aiagent.gateway.document.ai.AiIndexRequest;
+import com.aiagent.gateway.document.ai.AiIndexResponse;
+import java.util.Base64;
+
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -29,6 +34,7 @@ public class DocumentService {
     private final DocumentRepository documentRepository;
     private final DocumentAclRepository aclRepository;
     private final FileStorage fileStorage;
+    private final AiServiceClient aiServiceClient;
 
     @Transactional
     public Document upload(MultipartFile file, List<UUID> allowedGroupIds) {
@@ -36,27 +42,23 @@ public class DocumentService {
 
         UUID uploaderId = SecurityUtils.getCurrentUserId();
 
-        // 1. 메타데이터 먼저 저장 (id 확보)
+        // 1. 메타데이터 저장
         Document document = documentRepository.save(
                 Document.builder()
                         .uploaderId(uploaderId)
                         .filename(file.getOriginalFilename())
-                        .storagePath("temp")  // 곧 갱신
+                        .storagePath("temp")
                         .mimeType(file.getContentType())
                         .fileSize(file.getSize())
                         .build()
         );
 
-        // 2. 실제 파일 저장 (key = documentId 기반)
+        // 2. 실제 파일 저장
         String key = document.getTenantId() + "/" + document.getId() + "_" + file.getOriginalFilename();
         fileStorage.store(file, key);
-
-        // 3. storagePath 갱신 (더티 체킹으로 자동 UPDATE)
-        // Document에 setter 없으니 재빌드 대신 메소드 필요 → 간단히 새 메소드 추가 권장
-        // 여기선 일단 별도 메소드로 처리 (아래 STEP에서 Document에 추가)
         document.assignStoragePath(key);
 
-        // 4. 접근 권한(ACL) 저장
+        // 3. ACL 저장
         if (allowedGroupIds != null) {
             for (UUID groupId : allowedGroupIds) {
                 aclRepository.save(
@@ -68,10 +70,39 @@ public class DocumentService {
             }
         }
 
-        log.info("Document uploaded: id={}, filename={}, uploader={}",
-                document.getId(), document.getFilename(), uploaderId);
+        // 4. AI 서비스로 인덱싱 요청
+        indexDocument(document, file);
+
+        log.info("Document uploaded & indexed: id={}, filename={}",
+                document.getId(), document.getFilename());
 
         return document;
+    }
+    /**
+     * Python AI 서비스에 인덱싱 요청하고 결과로 상태 갱신.
+     */
+    private void indexDocument(Document document, MultipartFile file) {
+        document.markIndexing();
+        try {
+            byte[] bytes = file.getBytes();
+            String base64 = Base64.getEncoder().encodeToString(bytes);
+
+            AiIndexRequest request = new AiIndexRequest(
+                    document.getTenantId().toString(),
+                    document.getId().toString(),
+                    base64,
+                    document.getMimeType()
+            );
+
+            AiIndexResponse response = aiServiceClient.index(request);
+            document.markIndexed(response.chunk_count());
+            log.info("Indexed document {}: {} chunks", document.getId(), response.chunk_count());
+
+        } catch (Exception e) {
+            log.error("Indexing failed for document {}", document.getId(), e);
+            document.markFailed(e.getMessage());
+            // 인덱싱 실패해도 업로드 자체는 성공으로 둠 (재시도 가능하게)
+        }
     }
 
     @Transactional(readOnly = true)
@@ -89,6 +120,17 @@ public class DocumentService {
     @Transactional
     public void delete(UUID documentId) {
         Document document = getDocument(documentId);
+
+        // Qdrant 벡터 삭제 (실패해도 문서 삭제는 진행)
+        try {
+            aiServiceClient.delete(
+                    document.getTenantId().toString(),
+                    documentId.toString()
+            );
+        } catch (Exception e) {
+            log.warn("Failed to delete vectors for document {}", documentId, e);
+        }
+
         aclRepository.deleteByDocumentId(documentId);
         fileStorage.delete(document.getStoragePath());
         documentRepository.delete(document);
