@@ -1,5 +1,6 @@
 import logging
 import base64
+import generator
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -51,6 +52,24 @@ class SearchHit(BaseModel):
 
 class SearchResponse(BaseModel):
     hits: list[SearchHit]
+
+
+class QueryRequest(BaseModel):
+    tenant_id: str
+    query: str
+    limit: int = 5
+
+
+class Citation(BaseModel):
+    document_id: str
+    chunk_index: int
+    content: str
+    score: float
+
+
+class QueryResponse(BaseModel):
+    answer: str
+    citations: list[Citation]
 
 
 # ===== API 엔드포인트 =====
@@ -111,6 +130,29 @@ def search(req: SearchRequest):
     except Exception:
         logger.exception("검색 실패")
         raise HTTPException(status_code=500, detail="검색 중 오류가 발생했습니다")
+
+@app.post("/query", response_model=QueryResponse)
+def query(req: QueryRequest):
+    """RAG: 검색 → LLM 답변 생성 → 답변 + 출처 반환."""
+    try:
+        # 1. 검색 (질문을 벡터로 변환 → tenant 격리 검색)
+        query_vector = embedder.embed_query(req.query)
+        hits = vector_store.search(
+            tenant_id=req.tenant_id,
+            query_vector=query_vector,
+            limit=req.limit,
+        )
+
+        # 2. 검색 결과를 근거로 LLM 답변 생성
+        answer = generator.generate_answer(req.query, hits)
+
+        # 3. 답변 + 출처(citation) 반환
+        citations = [Citation(**h) for h in hits]
+        return QueryResponse(answer=answer, citations=citations)
+
+    except Exception:
+        logger.exception("쿼리 처리 실패")
+        raise HTTPException(status_code=500, detail="질의 처리 중 오류가 발생했습니다")
 
 
 class DeleteRequest(BaseModel):

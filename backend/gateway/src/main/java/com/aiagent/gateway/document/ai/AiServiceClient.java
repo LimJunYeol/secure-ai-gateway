@@ -45,5 +45,14 @@ public class AiServiceClient {
                 .toBodilessEntity();
     }
 
+    public AiQueryResponse query(AiQueryRequest request) {
+        log.info("Calling AI service /query: '{}'", request.query());
+        return aiServiceRestClient.post()
+                .uri("/query")
+                .body(request)
+                .retrieve()
+                .body(AiQueryResponse.class);
+    }
+
     public record DeleteRequest(String tenant_id, String document_id) {}
 }
